@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="DLLInjection.cpp">
+    <ClCompile Include="DLLInjector.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
   </ItemGroup>

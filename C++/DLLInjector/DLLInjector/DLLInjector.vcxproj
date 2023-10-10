@@ -22,8 +22,9 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{794393b5-6b86-490a-ad3f-2292138fcb29}</ProjectGuid>
-    <RootNamespace>DLLInjection</RootNamespace>
+    <RootNamespace>DLLInjector</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>DLLInjector</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -127,7 +128,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="DLLInjection.cpp" />
+    <ClCompile Include="DLLInjector.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="obfuscate.h" />
