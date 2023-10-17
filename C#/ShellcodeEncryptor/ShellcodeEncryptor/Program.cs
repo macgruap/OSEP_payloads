@@ -34,17 +34,29 @@ namespace ShellcodeEncryptor
         static void Main(string[] args)
         {
             string filepath = args[0];
-            string bufString = File.ReadAllText(filepath);
+            string bufString = "";
+            byte[] buf;
 
-            bufString = bufString.Replace("\r", string.Empty).Replace("\n", string.Empty).Replace("\t", string.Empty).Replace(" ", string.Empty).Replace(";", string.Empty).Replace(",", string.Empty).Replace("0x", "x").Replace("{", string.Empty).Replace("}", string.Empty);
-            string[] bufArr = bufString.Split('x');
-            byte[] buf = new byte[bufArr.Length - 1];
-
-            for (int i = 0; i < bufArr.Length - 1; i++)
+            if (filepath.Split('.')[filepath.Split('.').Length-1] == "bin")
             {
-                string a = bufArr[i + 1];
-                buf[i] = Convert.ToByte(a, 16);
+                buf = File.ReadAllBytes(filepath);
             }
+            else
+            {
+                bufString = File.ReadAllText(filepath);
+                bufString = bufString.Replace("\r", string.Empty).Replace("\n", string.Empty).Replace("\t", string.Empty).Replace(" ", string.Empty).Replace(";", string.Empty).Replace(",", string.Empty).Replace("0x", "x").Replace("{", string.Empty).Replace("}", string.Empty);
+
+                string[] bufArr = bufString.Split('x');
+                buf = new byte[bufArr.Length - 1];
+
+                for (int i = 0; i < bufArr.Length - 1; i++)
+                {
+                    string a = bufArr[i + 1];
+                    buf[i] = Convert.ToByte(a, 16);
+                }
+
+            }
+                        
             AesCryptoServiceProvider aes = new AesCryptoServiceProvider();
             aes.KeySize = 256;
             byte[] key = aes.Key;
