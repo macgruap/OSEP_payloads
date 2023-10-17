@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <regex>
+#include <format>
 #include "structures.h"
 
 using namespace std;
@@ -14,8 +15,14 @@ int main(int argc, char* argv[])
 		cout << "Usage: ShellcodeEncryptor.exe <file> <16-char key>";
 		return -1;
 	}
-	ifstream t(argv[1]);
+	string origFile = argv[1];
 	string key_s = argv[2];
+	
+	ifstream t(origFile);
+	t.seekg(0, std::ios::end);
+	std::streampos fileSize = t.tellg();
+	t.seekg(0, std::ios::beg);
+
 	while (key_s.length() < 16) {
 		key_s += "0";
 	}
@@ -23,31 +30,42 @@ int main(int argc, char* argv[])
 	istringstream iss(cstr);
 	unsigned char key[16];
 	if (iss >> key) {
-		stringstream ss;
-		ss << t.rdbuf();
-		string shellcode = ss.str();
-		printf("Processing payload...\n");
-		shellcode = shellcode.substr(shellcode.find_last_of("=") + 1, shellcode.size());
-		shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\t'), shellcode.end());
-		shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\"'), shellcode.end());
-		shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\n'), shellcode.end());
-		shellcode.erase(remove(shellcode.begin(), shellcode.end(), ';'), shellcode.end());
-		shellcode.erase(remove(shellcode.begin(), shellcode.end(), ' '), shellcode.end());
-		shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\\'), shellcode.end());
-		shellcode.erase(remove(shellcode.begin(), shellcode.end(), 'x'), shellcode.end());
-		int len = shellcode.length() / 2;
-		unsigned char* buf = new unsigned char[len];
+		string shellcode, shellcode_;
+		shellcode_.resize(fileSize);
+		t.read(&shellcode_[0], fileSize);
+		int len = 0;
+		if (origFile.substr(origFile.find_last_of('.'), origFile.length()) == ".bin") {
+			printf("Processing payload...\n");
+			for (int i = 0; i < fileSize; i++) {
+				shellcode += std::format("{:02x}", (int)(uint8_t)shellcode_[i]);
+			}
+		}
+		else {
+			shellcode = shellcode_;
+			shellcode = shellcode.substr(shellcode.find_last_of("=") + 1, shellcode.size());
+			shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\t'), shellcode.end());
+			shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\"'), shellcode.end());
+			shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\n'), shellcode.end());
+			shellcode.erase(remove(shellcode.begin(), shellcode.end(), ';'), shellcode.end());
+			shellcode.erase(remove(shellcode.begin(), shellcode.end(), ' '), shellcode.end());
+			shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\\'), shellcode.end());
+			shellcode.erase(remove(shellcode.begin(), shellcode.end(), 'x'), shellcode.end());
+		}
+
+		len = (shellcode.find_last_not_of('\x00')+1) / 2;
+
+ 		unsigned char* buf = new unsigned char[len];
 		cout << "0%";
 		const char* cstr = shellcode.c_str();
-		int ref = 0;
+		float ref = 0;
 		for (int i = 0; i < len; i++) {
 			sscanf_s(cstr, "%2hhx", &buf[i]);
 			cstr += 2 * sizeof(char);
-			float percent = ((float)i / (float)len) * 100;
-			if ((int)percent >= ref+10) {
+			float percent = ((int)i / (int)len) * 100;
+			if (percent >= ref+0.1) {
  				printf("\33[2K\r");
-				cout << (int) percent << "%";
-				ref = (int)percent;
+				cout << percent << "%";
+				ref = percent;
 			}
  		}
 		printf("\33[2K\r");
@@ -63,7 +81,7 @@ int main(int argc, char* argv[])
 			}
 			else {
 				paddedMessage[i] = buf[i];
-			}
+			} 
 		}
 
 		unsigned char* encryptedMessage = new unsigned char[paddedMessageLen];
@@ -95,7 +113,6 @@ int main(int argc, char* argv[])
 			ofstream outFile;
 			ostringstream content;
 
-			string origFile = argv[1];
 			string path = origFile.substr(0, origFile.find_last_of("\\"))+"\\encPayload.txt";
 
 			printf("Encrypted payload too big to be displayed! Dumping it to %s...\n", path.c_str());
