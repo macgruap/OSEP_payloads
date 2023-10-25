@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
 	}
 	const char* cstr = key_s.c_str();
 	istringstream iss(cstr);
-	unsigned char key[16];
+	unsigned char key[17];
 	if (iss >> key) {
 		string shellcode, shellcode_;
 		shellcode_.resize(fileSize);
@@ -55,7 +55,6 @@ int main(int argc, char* argv[])
 		len = (shellcode.find_last_not_of('\x00')+1) / 2;
 
  		unsigned char* buf = new unsigned char[len];
-		cout << "0%";
 		const char* cstr = shellcode.c_str();
 		float ref = 0;
 		for (int i = 0; i < len; i++) {
