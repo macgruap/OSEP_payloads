@@ -18,11 +18,6 @@ int main(int argc, char* argv[])
 	string origFile = argv[1];
 	string key_s = argv[2];
 	
-	ifstream t(origFile);
-	t.seekg(0, std::ios::end);
-	std::streampos fileSize = t.tellg();
-	t.seekg(0, std::ios::beg);
-
 	while (key_s.length() < 16) {
 		key_s += "0";
 	}
@@ -31,17 +26,26 @@ int main(int argc, char* argv[])
 	unsigned char key[17];
 	if (iss >> key) {
 		string shellcode, shellcode_;
-		shellcode_.resize(fileSize);
-		t.read(&shellcode_[0], fileSize);
 		int len = 0;
 		if (origFile.substr(origFile.find_last_of('.'), origFile.length()) == ".bin") {
+			ifstream t(origFile, ios::binary);
+			t.seekg(0, std::ios::end);
+			long fileSize = t.tellg();
+			t.seekg(0, std::ios::beg);
+			shellcode_.resize(fileSize);
+			t.read(&shellcode_[0], fileSize);
 			printf("Processing payload...\n");
 			for (int i = 0; i < fileSize; i++) {
 				shellcode += std::format("{:02x}", (int)(uint8_t)shellcode_[i]);
 			}
 		}
 		else {
-			shellcode = shellcode_;
+			ifstream t(origFile);
+			t.seekg(0, std::ios::end);
+			long fileSize = t.tellg();
+			t.seekg(0, std::ios::beg);
+			shellcode.resize(fileSize);
+			t.read(&shellcode[0], fileSize);
 			shellcode = shellcode.substr(shellcode.find_last_of("=") + 1, shellcode.size());
 			shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\t'), shellcode.end());
 			shellcode.erase(remove(shellcode.begin(), shellcode.end(), '\"'), shellcode.end());

